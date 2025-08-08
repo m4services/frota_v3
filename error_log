@@ -1,0 +1,4 @@
+[29-Jul-2025 13:11:29 UTC] Login error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'ativo' in 'WHERE'
+[29-Jul-2025 13:11:35 UTC] Login error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'ativo' in 'WHERE'
+[29-Jul-2025 13:12:16 UTC] Login error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'ativo' in 'WHERE'
+[29-Jul-2025 13:12:19 UTC] Login error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'ativo' in 'WHERE'
