@@ -349,6 +349,9 @@ if ($user['profile'] === 'admin') {
                         </td>
                         <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                             <?php echo number_format($displacement['km_traveled']); ?> km
+                            <?php if ($displacement['km_traveled'] > 500): ?>
+                            <br><span class="text-xs text-orange-600">Viagem longa</span>
+                            <?php endif; ?>
                         </td>
                         <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                             <?php 

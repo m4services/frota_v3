@@ -30,10 +30,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $success = "Veículo criado com sucesso!";
                 } else {
                     $id = $_POST['id'] ?? '';
-                    $query = "UPDATE veiculos SET nome = ?, placa = ?, troca_oleo = ?, hodometro_atual = ?, alinhamento = ?, observacoes = ?, foto = ?, documento_vencimento = ?, tipo_documento = ? WHERE id = ?";
-                    $stmt = $db->prepare($query);
-                    $stmt->execute([$name, $plate, $oil_change, $current_odometer, $alignment, $observations, $photo, $documento_vencimento, $tipo_documento, $id]);
-                    $success = "Veículo atualizado com sucesso!";
+                    
+                    // For updates, we need to be careful with odometer changes
+                    // Get current vehicle data
+                    $getCurrentQuery = "SELECT hodometro_atual FROM veiculos WHERE id = ?";
+                    $getCurrentStmt = $db->prepare($getCurrentQuery);
+                    $getCurrentStmt->execute([$id]);
+                    $currentVehicle = $getCurrentStmt->fetch(PDO::FETCH_ASSOC);
+                    
+                    if (!$currentVehicle) {
+                        $error = "Veículo não encontrado.";
+                    } else {
+                        // Check if there are any completed displacements for this vehicle
+                        $hasDisplacementsQuery = "SELECT COUNT(*) as count FROM deslocamentos WHERE veiculo_id = ? AND status = 'completed'";
+                        $hasDisplacementsStmt = $db->prepare($hasDisplacementsQuery);
+                        $hasDisplacementsStmt->execute([$id]);
+                        $hasDisplacements = $hasDisplacementsStmt->fetch(PDO::FETCH_ASSOC)['count'] > 0;
+                        
+                        // If vehicle has completed displacements, don't allow reducing odometer below current value
+                        if ($hasDisplacements && $current_odometer < $currentVehicle['hodometro_atual']) {
+                            $error = "Não é possível reduzir o hodômetro de um veículo que já possui deslocamentos registrados. Hodômetro atual: " . number_format($currentVehicle['hodometro_atual']) . " km";
+                        } else {
+                            $query = "UPDATE veiculos SET nome = ?, placa = ?, troca_oleo = ?, hodometro_atual = ?, alinhamento = ?, observacoes = ?, foto = ?, documento_vencimento = ?, tipo_documento = ? WHERE id = ?";
+                            $stmt = $db->prepare($query);
+                            $stmt->execute([$name, $plate, $oil_change, $current_odometer, $alignment, $observations, $photo, $documento_vencimento, $tipo_documento, $id]);
+                            $success = "Veículo atualizado com sucesso!";
+                        }
+                    }
                 }
             } catch (Exception $e) {
                 $error = "Erro ao salvar veículo: " . $e->getMessage();
@@ -55,10 +78,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'delete') {
         $id = $_POST['id'] ?? '';
         try {
-            $query = "DELETE FROM veiculos WHERE id = ?";
-            $stmt = $db->prepare($query);
-            $stmt->execute([$id]);
-            $success = "Veículo excluído com sucesso!";
+            // Check if vehicle has any displacements
+            $checkDisplacementsQuery = "SELECT COUNT(*) as count FROM deslocamentos WHERE veiculo_id = ?";
+            $checkDisplacementsStmt = $db->prepare($checkDisplacementsQuery);
+            $checkDisplacementsStmt->execute([$id]);
+            $hasDisplacements = $checkDisplacementsStmt->fetch(PDO::FETCH_ASSOC)['count'] > 0;
+            
+            if ($hasDisplacements) {
+                $error = "Não é possível excluir um veículo que possui deslocamentos registrados.";
+            } else {
+                $query = "DELETE FROM veiculos WHERE id = ?";
+                $stmt = $db->prepare($query);
+                $stmt->execute([$id]);
+                $success = "Veículo excluído com sucesso!";
+            }
         } catch (Exception $e) {
             $error = "Erro ao excluir veículo: " . $e->getMessage();
         }
@@ -143,6 +176,24 @@ foreach ($vehicles as $vehicle) {
     </div>
     <?php endif; ?>
 
+    <!-- Odometer Information Alert -->
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div class="flex items-start">
+            <i data-lucide="info" class="w-5 h-5 text-blue-400 mt-0.5 mr-3 flex-shrink-0"></i>
+            <div class="flex-1">
+                <h3 class="text-sm font-medium text-blue-800">Informação sobre Hodômetro</h3>
+                <div class="mt-2 text-sm text-blue-700">
+                    <p>O hodômetro dos veículos é atualizado automaticamente conforme o uso:</p>
+                    <ul class="list-disc list-inside mt-1 space-y-1">
+                        <li>Ao finalizar um deslocamento, o hodômetro é atualizado com o KM de retorno</li>
+                        <li>Ao editar um deslocamento, o hodômetro é recalculado automaticamente</li>
+                        <li>Ao excluir um deslocamento, o hodômetro é ajustado para remover a quilometragem</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Search and View Toggle -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <div class="flex flex-col sm:flex-row gap-4">
@@ -199,7 +250,7 @@ foreach ($vehicles as $vehicle) {
                 <div class="space-y-1 sm:space-y-2 text-xs sm:text-sm text-gray-600">
                     <div class="flex items-center">
                         <i data-lucide="car" class="w-4 h-4 mr-2"></i>
-                        <span><?php echo number_format($vehicle['hodometro_atual']); ?> km</span>
+                        <span><span class="hidden sm:inline">Hodômetro: </span><?php echo number_format($vehicle['hodometro_atual']); ?> km</span>
                     </div>
                     <div class="flex items-center">
                         <i data-lucide="calendar" class="w-4 h-4 mr-2"></i>
@@ -209,6 +260,26 @@ foreach ($vehicles as $vehicle) {
                         <i data-lucide="settings" class="w-4 h-4 mr-2"></i>
                         <span><span class="hidden sm:inline">Alinhamento: </span><span class="sm:hidden">A: </span><?php echo number_format($vehicle['alinhamento']); ?> km</span>
                     </div>
+                    
+                    <!-- Maintenance alerts -->
+                    <?php 
+                    $needsOilChange = $vehicle['hodometro_atual'] >= $vehicle['troca_oleo'];
+                    $needsAlignment = $vehicle['hodometro_atual'] >= $vehicle['alinhamento'];
+                    ?>
+                    <?php if ($needsOilChange || $needsAlignment): ?>
+                    <div class="flex items-center text-orange-600">
+                        <i data-lucide="alert-triangle" class="w-4 h-4 mr-2"></i>
+                        <span class="text-xs">
+                            <?php if ($needsOilChange && $needsAlignment): ?>
+                                Óleo e alinhamento
+                            <?php elseif ($needsOilChange): ?>
+                                Troca de óleo
+                            <?php else: ?>
+                                Alinhamento
+                            <?php endif; ?>
+                        </span>
+                    </div>
+                    <?php endif; ?>
                 </div>
                 
                 <!-- Status Badge -->
@@ -272,7 +343,25 @@ foreach ($vehicles as $vehicle) {
                             </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?php echo htmlspecialchars($vehicle['placa']); ?></td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?php echo number_format($vehicle['hodometro_atual']); ?> km</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <?php echo number_format($vehicle['hodometro_atual']); ?> km
+                            <?php 
+                            $needsOilChange = $vehicle['hodometro_atual'] >= $vehicle['troca_oleo'];
+                            $needsAlignment = $vehicle['hodometro_atual'] >= $vehicle['alinhamento'];
+                            ?>
+                            <?php if ($needsOilChange || $needsAlignment): ?>
+                            <br><span class="text-xs text-orange-600">
+                                <i data-lucide="alert-triangle" class="w-3 h-3 inline mr-1"></i>
+                                <?php if ($needsOilChange && $needsAlignment): ?>
+                                    Óleo e alinhamento
+                                <?php elseif ($needsOilChange): ?>
+                                    Troca de óleo
+                                <?php else: ?>
+                                    Alinhamento
+                                <?php endif; ?>
+                            </span>
+                            <?php endif; ?>
+                        </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             <?php if ($vehicle['documento_vencimento']): ?>
                                 <?php 
@@ -360,9 +449,10 @@ foreach ($vehicles as $vehicle) {
                 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Hodômetro Atual (km)</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Hodômetro Inicial (km)</label>
                         <input type="number" name="current_odometer" id="vehicleOdometer" required 
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <p class="text-xs text-gray-500 mt-1">Este valor será atualizado automaticamente conforme o uso</p>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Foto do Veículo</label>
@@ -556,6 +646,28 @@ foreach ($vehicles as $vehicle) {
         document.getElementById('vehicleTipoDocumento').value = vehicle.tipo_documento || 'CRLV';
         document.getElementById('vehicleDocumentoVencimento').value = vehicle.documento_vencimento ? vehicle.documento_vencimento.split(' ')[0] : '';
         
+        // Show warning about odometer changes if vehicle has displacements
+        const odometerField = document.getElementById('vehicleOdometer');
+        const odometerLabel = odometerField.previousElementSibling;
+        
+        // Check if vehicle has displacements (we'll do this via a simple check)
+        fetch(`/frota/api/check-vehicle-displacements.php?vehicle_id=${vehicle.id}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.hasDisplacements) {
+                    odometerLabel.innerHTML = 'Hodômetro Atual (km) <span class="text-orange-600 text-xs">- Cuidado ao alterar</span>';
+                    odometerField.title = 'Este veículo possui deslocamentos. Não reduza o hodômetro abaixo do valor atual.';
+                    odometerField.style.borderColor = '#f59e0b';
+                } else {
+                    odometerLabel.innerHTML = 'Hodômetro Atual (km)';
+                    odometerField.title = '';
+                    odometerField.style.borderColor = '';
+                }
+            })
+            .catch(error => {
+                console.log('Could not check vehicle displacements:', error);
+            });
+        
         if (vehicle.foto) {
             document.getElementById('previewImg').src = vehicle.foto;
             document.getElementById('imagePreview').classList.remove('hidden');
@@ -641,6 +753,14 @@ foreach ($vehicles as $vehicle) {
         document.getElementById('vehicleForm').reset();
         document.getElementById('imagePreview').classList.add('hidden');
         document.getElementById('vehicleTipoDocumento').value = 'CRLV';
+        
+        // Reset odometer field styling for new vehicles
+        const odometerField = document.getElementById('vehicleOdometer');
+        const odometerLabel = odometerField.previousElementSibling;
+        odometerLabel.innerHTML = 'Hodômetro Inicial (km)';
+        odometerField.title = '';
+        odometerField.style.borderColor = '';
+        
         openModal('vehicleModal');
     }
     

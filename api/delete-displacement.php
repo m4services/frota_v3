@@ -25,7 +25,7 @@ try {
     $db->beginTransaction();
 
     // Get displacement info to update vehicle availability if needed
-    $getQuery = "SELECT veiculo_id, status FROM deslocamentos WHERE id = ?";
+    $getQuery = "SELECT veiculo_id, status, km_saida, km_retorno FROM deslocamentos WHERE id = ?";
     $getStmt = $db->prepare($getQuery);
     $getStmt->execute([$id]);
     $displacement = $getStmt->fetch(PDO::FETCH_ASSOC);
@@ -35,6 +35,24 @@ try {
         exit;
     }
 
+    // If displacement was completed, adjust vehicle odometer
+    if ($displacement['status'] === 'completed' && $displacement['km_retorno'] && $displacement['km_saida']) {
+        $kmTraveled = $displacement['km_retorno'] - $displacement['km_saida'];
+        
+        // Get current vehicle odometer
+        $getVehicleOdometerQuery = "SELECT hodometro_atual FROM veiculos WHERE id = ?";
+        $getVehicleOdometerStmt = $db->prepare($getVehicleOdometerQuery);
+        $getVehicleOdometerStmt->execute([$displacement['veiculo_id']]);
+        $currentOdometer = $getVehicleOdometerStmt->fetchColumn();
+        
+        // Subtract the traveled km from current odometer (but don't go below the displacement's km_saida)
+        $newOdometer = max($currentOdometer - $kmTraveled, $displacement['km_saida']);
+        
+        // Update vehicle odometer
+        $updateVehicleOdometerQuery = "UPDATE veiculos SET hodometro_atual = ? WHERE id = ?";
+        $updateVehicleOdometerStmt = $db->prepare($updateVehicleOdometerQuery);
+        $updateVehicleOdometerStmt->execute([$newOdometer, $displacement['veiculo_id']]);
+    }
     // Delete displacement
     $deleteQuery = "DELETE FROM deslocamentos WHERE id = ?";
     $deleteStmt = $db->prepare($deleteQuery);

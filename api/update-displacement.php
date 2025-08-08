@@ -36,6 +36,20 @@ $db = $database->getConnection();
 try {
     $db->beginTransaction();
 
+    // Get current displacement data to calculate odometer changes
+    $getCurrentQuery = "SELECT km_retorno, veiculo_id FROM deslocamentos WHERE id = ?";
+    $getCurrentStmt = $db->prepare($getCurrentQuery);
+    $getCurrentStmt->execute([$id]);
+    $currentDisplacement = $getCurrentStmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$currentDisplacement) {
+        echo json_encode(['success' => false, 'message' => 'Deslocamento não encontrado']);
+        exit;
+    }
+    
+    $oldKmRetorno = $currentDisplacement['km_retorno'];
+    $vehicleId = $currentDisplacement['veiculo_id'];
+
     // Convert datetime-local to MySQL datetime format
     $data_inicio_mysql = date('Y-m-d H:i:s', strtotime($data_inicio));
     $data_fim_mysql = !empty($data_fim) ? date('Y-m-d H:i:s', strtotime($data_fim)) : null;
@@ -58,6 +72,24 @@ try {
     
     $stmt = $db->prepare($query);
     $stmt->execute($params);
+    
+    // Update vehicle odometer if km_retorno changed
+    if ($oldKmRetorno != $km_retorno) {
+        // Get current vehicle odometer
+        $getVehicleOdometerQuery = "SELECT hodometro_atual FROM veiculos WHERE id = ?";
+        $getVehicleOdometerStmt = $db->prepare($getVehicleOdometerQuery);
+        $getVehicleOdometerStmt->execute([$vehicleId]);
+        $currentOdometer = $getVehicleOdometerStmt->fetchColumn();
+        
+        // Calculate the difference and adjust odometer
+        $kmDifference = $km_retorno - $oldKmRetorno;
+        $newOdometer = max($currentOdometer + $kmDifference, $km_retorno);
+        
+        // Update vehicle odometer
+        $updateVehicleOdometerQuery = "UPDATE veiculos SET hodometro_atual = ? WHERE id = ?";
+        $updateVehicleOdometerStmt = $db->prepare($updateVehicleOdometerQuery);
+        $updateVehicleOdometerStmt->execute([$newOdometer, $vehicleId]);
+    }
 
     $db->commit();
 

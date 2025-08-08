@@ -48,10 +48,18 @@ try {
     $updateDispStmt = $db->prepare($updateDispQuery);
     $updateDispStmt->execute([$return_km, $observations, $displacement_id]);
 
-    // Update vehicle availability and odometer
+    // Update vehicle availability and odometer (only if return_km is higher than current)
+    $getCurrentOdometerQuery = "SELECT hodometro_atual FROM veiculos WHERE id = ?";
+    $getCurrentOdometerStmt = $db->prepare($getCurrentOdometerQuery);
+    $getCurrentOdometerStmt->execute([$vehicle_id]);
+    $currentOdometer = $getCurrentOdometerStmt->fetchColumn();
+    
+    // Only update odometer if return_km is higher than current odometer
+    $newOdometer = max($return_km, $currentOdometer);
+    
     $updateVehicleQuery = "UPDATE veiculos SET disponivel = 1, hodometro_atual = ? WHERE id = ?";
     $updateVehicleStmt = $db->prepare($updateVehicleQuery);
-    $updateVehicleStmt->execute([$return_km, $vehicle_id]);
+    $updateVehicleStmt->execute([$newOdometer, $vehicle_id]);
 
     $db->commit();
 

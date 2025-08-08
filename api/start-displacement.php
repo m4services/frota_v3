@@ -26,7 +26,7 @@ try {
     }
 
     // Check if vehicle is available
-    $vehicleQuery = "SELECT disponivel FROM veiculos WHERE id = ?";
+    $vehicleQuery = "SELECT disponivel, hodometro_atual FROM veiculos WHERE id = ?";
     $vehicleStmt = $db->prepare($vehicleQuery);
     $vehicleStmt->bindParam(1, $vehicle_id);
     $vehicleStmt->execute();
@@ -34,6 +34,12 @@ try {
 
     if (!$vehicle || !$vehicle['disponivel']) {
         echo json_encode(['success' => false, 'message' => 'Veículo não disponível']);
+        exit;
+    }
+    
+    // Validate departure_km against current odometer
+    if ($departure_km < $vehicle['hodometro_atual']) {
+        echo json_encode(['success' => false, 'message' => 'KM de saída não pode ser menor que o hodômetro atual do veículo (' . number_format($vehicle['hodometro_atual']) . ' km)']);
         exit;
     }
 

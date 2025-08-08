@@ -184,6 +184,22 @@ if (!$activeDisplacement) {
                 kmInfo.classList.add('hidden');
                 finishBtn.disabled = true;
             }
+            
+            // Show warning if return km is much higher than expected
+            const expectedMaxKm = departureKm + 1000; // 1000km seems reasonable for a single trip
+            if (returnKm > expectedMaxKm) {
+                if (!document.getElementById('kmWarning')) {
+                    const warning = document.createElement('div');
+                    warning.id = 'kmWarning';
+                    warning.className = 'bg-yellow-50 p-3 rounded-lg mt-2';
+                    warning.innerHTML = '<p class="text-sm text-yellow-700"><i data-lucide="alert-triangle" class="w-4 h-4 inline mr-1"></i>KM muito alto para uma viagem. Verifique se está correto.</p>';
+                    kmInfo.parentNode.appendChild(warning);
+                    lucide.createIcons();
+                }
+            } else {
+                const warning = document.getElementById('kmWarning');
+                if (warning) warning.remove();
+            }
         });
 
         // Block navigation

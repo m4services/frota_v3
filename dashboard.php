@@ -641,9 +641,10 @@ $isAdmin = $user['profile'] === 'admin';
                         <div class="relative">
                             <input type="number" name="departure_km" id="modal_departure_km" required 
                                    class="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base" 
-                                   placeholder="KM atual do veículo">
+                                   placeholder="KM atual do veículo" readonly>
                             <i data-lucide="navigation" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
                         </div>
+                        <p class="text-xs text-gray-500 mt-1">O KM de saída será automaticamente o hodômetro atual do veículo</p>
                     </div>
                 </div>
 
@@ -674,7 +675,11 @@ $isAdmin = $user['profile'] === 'admin';
         document.getElementById('modal_vehicle_odometer').textContent = `Hodômetro: ${parseInt(vehicle.hodometro_atual).toLocaleString()} km`;
         document.getElementById('modal_vehicle_photo').src = vehicle.foto || 'https://placehold.co/60x60.png?text=Car';
         document.getElementById('modal_departure_km').value = vehicle.hodometro_atual;
-        document.getElementById('modal_departure_km').min = vehicle.hodometro_atual;
+        document.getElementById('modal_departure_km').min = parseInt(vehicle.hodometro_atual);
+        
+        // Make departure_km readonly and set to current odometer
+        document.getElementById('modal_departure_km').readOnly = true;
+        document.getElementById('modal_departure_km').style.backgroundColor = '#f9fafb';
         
         openModal('startDisplacementModal');
         lucide.createIcons();
